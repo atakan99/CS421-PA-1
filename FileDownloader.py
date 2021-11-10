@@ -189,16 +189,27 @@ upper_endpoint = ''
 use_range = False
 
 
-print('URL of the index file:', index_file)
+
 if args.range:
-    str = range.split('-')
-    lower_endpoint = str[0]
-    upper_endpoint = str[1]
-    print('Lower endpoint:', lower_endpoint )
-    print('Upper endpoint:', upper_endpoint )
-    use_range = True
+    if '-' in range:
+        if len(range.split('-')) == 3:
+            str = range.split('-')
+            lower_endpoint = str[0]
+            upper_endpoint = str[1]
+            use_range = True
+        else:
+            print('final argument should be in the form <lower endpoint>-<upper endpoint>')
+            sys.exit()
+    else: 
+        print('final argument should be in the form \'<lower endpoint>-<upper endpoint>')
+        sys.exit()
 else:
     print('No range is given')    
+
+print('URL of the index file:', index_file)
+if use_range:
+    print('Lower endpoint:', lower_endpoint )
+    print('Upper endpoint:', upper_endpoint )
 
 PORT = 80
 
