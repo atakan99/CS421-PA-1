@@ -192,7 +192,7 @@ use_range = False
 
 if args.range:
     if '-' in range:
-        if len(range.split('-')) == 3:
+        if len(range.split('-')) == 2:
             str = range.split('-')
             lower_endpoint = str[0]
             upper_endpoint = str[1]
