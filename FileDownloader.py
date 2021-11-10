@@ -22,6 +22,17 @@ HTTP/1.1 404 Not Found
 HTTP/1.1 200 OK
 '''
 
+'''
+{'date': 'Wed, 10 Nov 2021 12:12:08 GMT', 'server': 'Apache/2.4.25 (FreeBSD) OpenSSL/1.0.2u-freebsd PHP/7.4.15', 
+'last-modified': 'Mon, 25 Oct 2021 17:48:47 GMT', 'etag': '"b-5cf30f914cb18"', 'accept-ranges': 'bytes', 
+'content-length': '11', 'content-type': 'text/plain', 'http': 'HTTP/1.1 200 OK', 'body': 'Cras nunc.\n'}
+
+{'date': 'Wed, 10 Nov 2021 12:12:29 GMT', 'server': 'Apache/2.4.25 (FreeBSD) OpenSSL/1.0.2u-freebsd PHP/7.4.15', 
+'content-length': '238', 'content-type': 'text/html; charset=iso-8859-1', 
+'http': 'HTTP/1.1 404 Not Found', 
+'body': '<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL /~cs421/fall21/project1/files2/dummy5.txt was not found on this server.</p>\n</body></html>\n'}
+'''
+
 import socket
 import argparse
 import os
@@ -99,28 +110,62 @@ def jsonify(response):
     d['body'] = header[len(header)-1]
     return d
 
-def download_index_files_ranged(file_list, range = '0-0'):
-   return
-    
-
-def download_index_files(file_list, my_socket, port):
-    print(file_list)
+def download_index_files_ranged(file_list, my_socket, port, lower_endpoint, upper_endpoint):
+    range = '{}-{}'.format(lower_endpoint,upper_endpoint)
+    number = 0
     for i in file_list:
+        number = number + 1 
         temp = separate_website_and_file_names(i)
         host_addr = temp[0]
         file_name = temp[1]
         my_socket = create_socket() 
-        connect_to_host(host_addr, my_socket,PORT)
+        connect_to_host(host_addr, my_socket,port)
         req = formatted_http_get(file_name,host_addr)
+        answer_str = send_http_req(my_socket, req)
+        close_socket(my_socket)
+        json_res = jsonify(answer_str)
+        if json_res['http'] == 'HTTP/1.1 404 Not Found':
+            print('{}. {} {}'.format(number, i, 'is not found'))
+            continue
+        if int (json_res['content-length']) < int(lower_endpoint):
+            print('{}. {} ( size = {}) {}'.format(number, i,json_res['content-length'] ,'is not downloaded'))
+            continue
+        my_socket = create_socket() 
+        connect_to_host(host_addr, my_socket,port)
+        req = formatted_http_partial_get(file_name,host_addr,range)
         answer_str = send_http_req(my_socket, req)
         close_socket(my_socket)
         json_res = jsonify(answer_str)
         a =  file_name.split('/')
         b = a[len(a)-1]
+        print('{}. {} (size = {}) (range = {} ) {}'.format(number, i, json_res['content-length'] ,range ,'is downloaded'))
+        with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
+            text_file.write(json_res['body'])
+def download_index_files(file_list, my_socket, port):
+    #print(file_list)
+    number = 0
+    for i in file_list:
+        number = number + 1 
+        temp = separate_website_and_file_names(i)
+        host_addr = temp[0]
+        file_name = temp[1]
+        my_socket = create_socket() 
+        connect_to_host(host_addr, my_socket,port)
+        req = formatted_http_get(file_name,host_addr)
+        answer_str = send_http_req(my_socket, req)
+        close_socket(my_socket)
+        json_res = jsonify(answer_str)
+        print(json_res)
+        a =  file_name.split('/')
+        b = a[len(a)-1]
+        if json_res['http'] == 'HTTP/1.1 404 Not Found':
+            print('{}. {} {}'.format(number, i, 'is not found'))
         if json_res['http'] == 'HTTP/1.1 200 OK':
+            print('{}. {} {}'.format(number, i, 'is downloaded'))
             with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
                 text_file.write(json_res['body'])
 
+################################################################################
 
 parser = argparse.ArgumentParser(description='downloads files within requested size parametes')
 
@@ -166,48 +211,10 @@ addr_list = get_index_file_list(http_json['body'])
 print('There are {} files in the index '.format(len(addr_list)))
 
 close_socket(my_socket)
-download_index_files(addr_list, my_socket, PORT)
-
-
-##print('response', list(response.partition('\r\n\r\n')).split('\n'))
-'''
-close_socket(my_socket)
-
-
-
-b = separate_website_and_file_names('www.cs.bilkent.edu.tr/~cs421/fall21/project1/files2/dummy5.txt')
-
-my_socket = create_socket()
-
-connect_to_host(b[0], my_socket, PORT)
-
-response = ''
 if use_range:
-    request2 = formatted_http_partial_get(b[1], b[0], range)
-    response = send_http_req(my_socket, request2)
-    #print(response)
-    print(jsonify(response))
-
-
-'''
-
-
- #request2 = "GET /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(b[1],b[0])
-    #print(request2)
-'''
-data_ls = []
-while True:
-    data = my_socket.recv(2048)
-    if not data: # after getting the first data
-        break #    Python wont come to this "if" so it wont break!
-
-    data = data.decode('utf-8')
-    data_ls.append(data)
-print('-----',data_ls)
-'''
-
-
-
+    download_index_files_ranged(addr_list, my_socket, PORT, lower_endpoint, upper_endpoint)
+else:
+    download_index_files(addr_list, my_socket, PORT)
 
 
 
