@@ -56,6 +56,9 @@ def formatted_http_get(file_name,host_addr):
 def formatted_http_partial_get(file_name ,host_addr ,range):
     return   "GET {0} HTTP/1.1\r\nhost:{1}\r\nrange: bytes={2}\r\n\r\n".format(file_name,host_addr,range) 
 
+def formatted_http_head(file_name,host_addr):
+    return "HEAD /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(file_name,host_addr)
+
 def create_socket():
     try:
         my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -120,7 +123,7 @@ def download_index_files_ranged(file_list, my_socket, port, lower_endpoint, uppe
         file_name = temp[1]
         my_socket = create_socket() 
         connect_to_host(host_addr, my_socket,port)
-        req = formatted_http_get(file_name,host_addr)
+        req = formatted_http_head(file_name,host_addr)
         answer_str = send_http_req(my_socket, req)
         close_socket(my_socket)
         json_res = jsonify(answer_str)
@@ -152,20 +155,26 @@ def download_index_files(file_list, my_socket, port):
         file_name = temp[1]
         my_socket = create_socket() 
         connect_to_host(host_addr, my_socket,port)
-        req = formatted_http_get(file_name,host_addr)
+        req = formatted_http_head(file_name,host_addr)
         answer_str = send_http_req(my_socket, req)
         close_socket(my_socket)
         json_res = jsonify(answer_str)
-        print(json_res)
         a =  file_name.split('/')
         b = a[len(a)-1]
         if json_res['http'] == 'HTTP/1.1 404 Not Found':
             print('{}. {} {}'.format(number, i, 'is not found'))
         if json_res['http'] == 'HTTP/1.1 200 OK':
-            print('{}. {} {}'.format(number, i, 'is downloaded'))
+            my_socket = create_socket() 
+            connect_to_host(host_addr, my_socket,port)
+            req = formatted_http_get(file_name,host_addr)
+            answer_str = send_http_req(my_socket, req)
+            close_socket(my_socket)
+            json_res = jsonify(answer_str)
+            a =  file_name.split('/')
+            b = a[len(a)-1]
             with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
                 text_file.write(json_res['body'])
-
+            print('{}. {} {}'.format(number, i, 'is downloaded'))
 ################################################################################
 
 parser = argparse.ArgumentParser(description='downloads files within requested size parametes')
