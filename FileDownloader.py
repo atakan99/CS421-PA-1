@@ -128,7 +128,7 @@ def download_index_files_ranged(file_list, my_socket, port, lower_endpoint, uppe
             print('{}. {} {}'.format(number, i, 'is not found'))
             continue
         if int (json_res['content-length']) < int(lower_endpoint):
-            print('{}. {} ( size = {}) {}'.format(number, i,json_res['content-length'] ,'is not downloaded'))
+            print('{}. {} (size = {}) (range = {}) {}'.format(number, i,json_res['content-length'], range ,'is not downloaded'))
             continue
         my_socket = create_socket() 
         connect_to_host(host_addr, my_socket,port)
@@ -141,6 +141,7 @@ def download_index_files_ranged(file_list, my_socket, port, lower_endpoint, uppe
         print('{}. {} (size = {}) (range = {} ) {}'.format(number, i, json_res['content-length'] ,range ,'is downloaded'))
         with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
             text_file.write(json_res['body'])
+
 def download_index_files(file_list, my_socket, port):
     #print(file_list)
     number = 0
