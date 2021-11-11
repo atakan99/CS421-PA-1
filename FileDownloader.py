@@ -37,205 +37,208 @@ import socket
 import argparse
 import os
 import sys
-import ast
-import json
-import re
+class FileDownloader:
 
-def separate_website_and_file_names(url):
-    ''' 
-    takes the url and seperates the filename and host addr
-    return [host_addr, file_name]
-    '''
-    website_url = url.split('/')[0]
-    file_name = ''.join(url.partition('/')[1:])
-    return[website_url, file_name]
+    @classmethod
+    def separate_website_and_file_names(cls,url):
+        ''' 
+        takes the url and seperates the filename and host addr
+        return [host_addr, file_name]
+        '''
+        website_url = url.split('/')[0]
+        file_name = ''.join(url.partition('/')[1:])
+        return[website_url, file_name]
 
-def formatted_http_get(file_name,host_addr):
-    return "GET /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(file_name,host_addr)
+    @classmethod
+    def formatted_http_get(cls,file_name,host_addr):
+        return "GET /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(file_name,host_addr)
 
-def formatted_http_partial_get(file_name ,host_addr ,range):
-    return   "GET {0} HTTP/1.1\r\nhost:{1}\r\nrange: bytes={2}\r\n\r\n".format(file_name,host_addr,range) 
+    @classmethod
+    def formatted_http_partial_get(cls,file_name ,host_addr ,range):
+        return   "GET {0} HTTP/1.1\r\nhost:{1}\r\nrange: bytes={2}\r\n\r\n".format(file_name,host_addr,range) 
 
-def formatted_http_head(file_name,host_addr):
-    return "HEAD /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(file_name,host_addr)
+    @classmethod
+    def formatted_http_head(cls,file_name,host_addr):
+        return "HEAD /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(file_name,host_addr)
 
-def create_socket():
-    try:
-        my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    except socket.error:
-        print('Failed to create socket')
-        sys.exit()
-    return my_socket
+    @classmethod
+    def create_socket(cls):
+        try:
+            my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        except socket.error:
+            print('Failed to create socket')
+            sys.exit()
+        return my_socket
 
-def connect_to_host(host_addr,my_socket, port):
-    try:
-        index_file_ip = socket.gethostbyname( host_addr )
-    except socket.gaierror:
-        print('index_file_host ip could not be recieved, exiting')
-        sys.exit()
+    @classmethod
+    def connect_to_host(cls,host_addr,my_socket, port):
+        try:
+            index_file_ip = socket.gethostbyname( host_addr )
+        except socket.gaierror:
+            print('index_file_host ip could not be recieved, exiting')
+            sys.exit()
 
-    my_socket.connect(( index_file_ip, port))
+        my_socket.connect(( index_file_ip, port))
 
-def close_socket(my_socket):
-    my_socket.close
+    @classmethod    
+    def close_socket(cls,my_socket):
+        my_socket.close
 
-def get_index_file_list(string):
-    index_file_addresses = string.split('\n')
-    index_file_addresses.pop()
-    return index_file_addresses
+    @classmethod
+    def get_index_file_list(cls,string):
+        index_file_addresses = string.split('\n')
+        index_file_addresses.pop()
+        return index_file_addresses
 
-def send_http_req(my_socket,http_req):
-    '''sends http request and returns the response as a string'''
-    response = ''
-    my_socket.sendall(http_req.encode('utf-8'))
-    while True:
-        recv = my_socket.recv(1024)
-        if recv == b'':
-            break
-        response += recv.decode()
-    return response
+    @classmethod
+    def dictify_response(cls,response):
+       
+        header, _, body = response.partition('\r\n\r\n')
+        header = header.split('\r\n')
+        header.append(body)
+        json_data = {}
+        new_header = header [1:len(header)-1]
+        for b in new_header:
+            i = b.split(': ')
+            json_data[i[0].lower()] = i[1]
+        json_data['http'] = header[0]
+        json_data['body'] = header[len(header)-1]
+        return json_data
 
-def jsonify(response):
-    header, _, body = response.partition('\r\n\r\n')
-    #print(header)
-    #print(body)
-    header = header.split('\r\n')
-    body = body
-    header.append(body)
-    #print(header)
-    d = {}
-    new_header = header [1:len(header)-1]
-    #print(new_header)
-    for b in new_header:
-        i = b.split(': ')
-        d[i[0].lower()] = i[1]
-    d['http'] = header[0]
-    d['body'] = header[len(header)-1]
-    return d
+    @classmethod
+    def send_http_req(cls,host_addr,http_req, port):
+        '''sends http request and returns the response as a dictionary '''
+        my_socket = cls.create_socket() 
+        cls.connect_to_host(host_addr, my_socket,port)
+        response = ''
+        my_socket.sendall(http_req.encode('utf-8'))
+        while True:
+            recv = my_socket.recv(2048)
+            if recv == b'':
+                break
+            response += recv.decode()
+        cls.close_socket(my_socket)
+        dict_res = cls.dictify_response(response)
+        return dict_res
 
-def download_index_files_ranged(file_list, my_socket, port, lower_endpoint, upper_endpoint):
-    range = '{}-{}'.format(lower_endpoint,upper_endpoint)
-    number = 0
-    for i in file_list:
-        number = number + 1 
-        temp = separate_website_and_file_names(i)
-        host_addr = temp[0]
-        file_name = temp[1]
-        my_socket = create_socket() 
-        connect_to_host(host_addr, my_socket,port)
-        req = formatted_http_head(file_name,host_addr)
-        answer_str = send_http_req(my_socket, req)
-        close_socket(my_socket)
-        json_res = jsonify(answer_str)
-        if json_res['http'] == 'HTTP/1.1 404 Not Found':
-            print('{}. {} {}'.format(number, i, 'is not found'))
-            continue
-        if int (json_res['content-length']) < int(lower_endpoint):
-            print('{}. {} (size = {}) (range = {}) {}'.format(number, i,json_res['content-length'], range ,'is not downloaded'))
-            continue
-        my_socket = create_socket() 
-        connect_to_host(host_addr, my_socket,port)
-        req = formatted_http_partial_get(file_name,host_addr,range)
-        answer_str = send_http_req(my_socket, req)
-        close_socket(my_socket)
-        json_res = jsonify(answer_str)
-        a =  file_name.split('/')
-        b = a[len(a)-1]
-        print('{}. {} (size = {}) (range = {} ) {}'.format(number, i, json_res['content-length'] ,range ,'is downloaded'))
-        with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
-            text_file.write(json_res['body'])
-
-def download_index_files(file_list, my_socket, port):
-    #print(file_list)
-    number = 0
-    for i in file_list:
-        number = number + 1 
-        temp = separate_website_and_file_names(i)
-        host_addr = temp[0]
-        file_name = temp[1]
-        my_socket = create_socket() 
-        connect_to_host(host_addr, my_socket,port)
-        req = formatted_http_head(file_name,host_addr)
-        answer_str = send_http_req(my_socket, req)
-        close_socket(my_socket)
-        json_res = jsonify(answer_str)
-        a =  file_name.split('/')
-        b = a[len(a)-1]
-        if json_res['http'] == 'HTTP/1.1 404 Not Found':
-            print('{}. {} {}'.format(number, i, 'is not found'))
-        if json_res['http'] == 'HTTP/1.1 200 OK':
-            my_socket = create_socket() 
-            connect_to_host(host_addr, my_socket,port)
-            req = formatted_http_get(file_name,host_addr)
-            answer_str = send_http_req(my_socket, req)
-            close_socket(my_socket)
-            json_res = jsonify(answer_str)
+    @classmethod
+    def download_index_files_ranged(cls,file_list, port, lower_endpoint, upper_endpoint):
+        '''
+        downloads the elements from the list, first sends a HEAD and then sends a get
+        '''
+        range = '{}-{}'.format(lower_endpoint,upper_endpoint)
+        
+        for index, value in enumerate(file_list, 1):
+            temp = cls.separate_website_and_file_names(value)
+            host_addr = temp[0]
+            file_name = temp[1]
+            req = cls.formatted_http_head(file_name,host_addr)
+            dict_res = cls.send_http_req(host_addr, req,port)
+            if dict_res['http'] != 'HTTP/1.1 200 OK':
+                print('{}. {} {}'.format(index, value, 'is not found'))
+                continue
+            if 'content-length' in dict_res:
+                if int (dict_res['content-length']) < int(lower_endpoint):
+                    print('{}. {} (size = {}) (range = {}) {}'.format(index, value,dict_res['content-length'], range ,'is not downloaded'))
+                    continue
+            if 'content-length' not in dict_res:
+                if int(lower_endpoint) > 0:
+                    print('{}. {} (size = {}) (range = {}) {}'.format(index, value,0, range ,'is not downloaded'))
+                    continue
+            req = cls.formatted_http_partial_get(file_name,host_addr,range)
+            dict_res = cls.send_http_req(host_addr, req,port)
             a =  file_name.split('/')
             b = a[len(a)-1]
             with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
-                text_file.write(json_res['body'])
-            print('{}. {} {}'.format(number, i, 'is downloaded'))
+                text_file.write(dict_res['body'])
+            if 'content-length' not in dict_res:
+                print('{}. {} (size = {}) (range = {}) {}'.format(index, value,0, range ,'is downloaded'))
+                continue
+            if int(dict_res['content-length']) >= int(upper_endpoint):
+                print('{}. {} (size = {}) (range = {} ) {}'.format(index, value, dict_res['content-length'] ,range ,'is downloaded'))
+                continue
+            if  int(dict_res['content-length']) < int(upper_endpoint):
+                print('{}. {} (size = {}) (range = {} ) {}'.format(index, value, dict_res['content-length'] ,
+                    '{}-{}'.format(lower_endpoint, int(dict_res['content-length']) + int(lower_endpoint) - 1 ) ,'is downloaded'))
+                continue
+
+    @classmethod
+    def download_index_files(cls,file_list, port):
+        '''
+        downloads the elements from the list, first sends a HEAD and then sends a get
+        '''
+        for index, value in enumerate(file_list, 1):
+            temp = cls.separate_website_and_file_names(value)
+            host_addr = temp[0]
+            file_name = temp[1]
+            req = cls.formatted_http_head(file_name,host_addr)
+            dict_res = cls.send_http_req(host_addr, req,port)
+            a =  file_name.split('/')
+            b = a[len(a)-1]
+            if dict_res['http'] != 'HTTP/1.1 200 OK':
+                print('{}. {} {}'.format(index, value, 'is not found'))
+                continue
+            req = cls.formatted_http_get(file_name,host_addr)
+            dict_res = cls.send_http_req(host_addr, req,port)
+            a =  file_name.split('/')
+            b = a[len(a)-1]
+            with open("{}".format(os.getcwd() + '/{}'.format(b)), "w") as text_file:
+                text_file.write(dict_res['body'])
+            if 'content-length' not in dict_res:
+                print('{}. {} (size = {}) {}'.format(index, value,0, 'is downloaded'))
+                continue
+            print('{}. {} (size = {}) {}'.format(index, value, dict_res['content-length'],'is downloaded'))
+    
+
 ################################################################################
 
-parser = argparse.ArgumentParser(description='downloads files within requested size parametes')
+if __name__ == '__main__':
+    PORT = 80
+    lower_endpoint = ''
+    upper_endpoint = ''
+    use_range = False
 
-parser.add_argument('index_file',  nargs=1 ,metavar='index_file', type=str, help='enter the address of the index file')
-parser.add_argument('range', metavar='range', type=str, nargs='?' ,help='enter lower and upper endpoints with \'-\' in between')
-args = parser.parse_args()
-index_file = args.index_file[0]
-range = args.range
-lower_endpoint = ''
-upper_endpoint = ''
-use_range = False
+    parser = argparse.ArgumentParser(description='downloads files within requested size parametes')
 
+    parser.add_argument('index_file',  nargs=1 ,metavar='index_file', type=str, help='enter the address of the index file')
+    parser.add_argument('range', metavar='range', type=str, nargs='?' ,help='enter lower and upper endpoints with \'-\' in between')
+    args = parser.parse_args()
+    index_file = args.index_file[0]
+    range = args.range
+  
+    if args.range:
+        if '-' in range:
+            if len(range.split('-')) == 2:
+                str = range.split('-')
+                lower_endpoint = str[0]
+                upper_endpoint = str[1]
+                use_range = True
+            else:
+                print('final argument should be in the form <lower endpoint>-<upper endpoint>')
+                sys.exit()
+        else: 
+            print('final argument should be in the form \'<lower endpoint>-<upper endpoint>')
+            sys.exit()  
 
+    print('URL of the index file:', index_file)
+    if use_range:
+        print('Lower endpoint:', lower_endpoint )
+        print('Upper endpoint:', upper_endpoint )
+    else:
+        print('No range is given')
 
-if args.range:
-    if '-' in range:
-        if len(range.split('-')) == 2:
-            str = range.split('-')
-            lower_endpoint = str[0]
-            upper_endpoint = str[1]
-            use_range = True
-        else:
-            print('final argument should be in the form <lower endpoint>-<upper endpoint>')
-            sys.exit()
-    else: 
-        print('final argument should be in the form \'<lower endpoint>-<upper endpoint>')
-        sys.exit()
-else:
-    print('No range is given')    
+    host_and_fname = FileDownloader.separate_website_and_file_names(index_file)
+    
+    request = FileDownloader.formatted_http_get(host_and_fname[1], host_and_fname[0])
+    josn_res = FileDownloader.send_http_req(host_and_fname[0], request,PORT)
+    addr_list = FileDownloader.get_index_file_list(josn_res['body'])
 
-print('URL of the index file:', index_file)
-if use_range:
-    print('Lower endpoint:', lower_endpoint )
-    print('Upper endpoint:', upper_endpoint )
+    print('There are {} files in the index '.format(len(addr_list)))
 
-PORT = 80
-
-foo = separate_website_and_file_names(index_file)
-
-my_socket = create_socket() 
-
-connect_to_host(foo[0], my_socket,PORT)
-
-response = ''
-# request = "GET /{0} HTTP/1.1\r\nHost:{1}\r\n\r\n".format(index_file_file,index_file_host)
-request = formatted_http_get(foo[1], foo[0])
-response = send_http_req(my_socket,request)
-#print(response)
-http_json = jsonify(response)
-#print(http_json)
-addr_list = get_index_file_list(http_json['body'])
-#print(addr_list)
-#print(index_file_addresses)
-print('There are {} files in the index '.format(len(addr_list)))
-
-close_socket(my_socket)
-if use_range:
-    download_index_files_ranged(addr_list, my_socket, PORT, lower_endpoint, upper_endpoint)
-else:
-    download_index_files(addr_list, my_socket, PORT)
+    if use_range:
+        FileDownloader.download_index_files_ranged(addr_list, PORT, lower_endpoint, upper_endpoint)
+    else:
+        FileDownloader.download_index_files(addr_list, PORT)
 
 
 
